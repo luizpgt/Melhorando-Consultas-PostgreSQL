@@ -1,0 +1,132 @@
+sources :
+    https://www.pgmustard.com/docs/explain
+    https://www.pgmustard.com/docs/explain/window-agg
+    https://www.pgmustard.com/blog/work-mem
+    https://www.pgmustard.com/docs/explain/hash-buckets
+
+I - Consulta Mais Cara : 9436.666 ms (00:09.437) | 9292.362 ms (00:09.292) |  9489.088 ms (00:09.489)
+
+    Query :::
+
+    SELECT em.nome, em.salario, em.dep_id, avg AS avg_salary FROM
+        (SELECT e.emp_id, e.dep_id, cast(AVG(salario) over(partition by dep_id) AS integer)
+                FROM empregados e) s
+        JOIN empregados em ON em.emp_id = s.emp_id
+        WHERE em.salario >= s.AVG
+        order by dep_id;
+
+--->Usando Explain Analyze :::
+                                                                        QUERY PLAN
+    ---------------------------------------------------------------------------------------------------------------------------------------------------------
+  8 Sort  (cost=3231304.92..3239637.66 rows=3333094 width=19) (actual time=9634.732..9938.970 rows=5058367 loops=1)
+    Sort Key: em.dep_id
+    Sort Method: external merge  Disk: 154584kB
+  7 ->  Hash Join  (cost=2021811.68..2733480.34 rows=3333094 width=19) (actual time=3516.119..8803.262 rows=5058367 loops=1)
+            Hash Cond: (s.emp_id = em.emp_id)
+            Join Filter: (em.salario >= s.avg)
+            Rows Removed by Join Filter: 4941633
+          4 ->  Subquery Scan on s  (cost=1671295.86..1971274.29 rows=9999281 width=8) (actual time=1852.840..4884.198 rows=10000000 loops=1)
+              3 ->  WindowAgg  (cost=1671295.86..1871281.48 rows=9999281 width=12) (actual time=1852.838..4502.893 rows=10000000 loops=1)
+                      2 ->  Sort  (cost=1671295.86..1696294.06 rows=9999281 width=12) (actual time=1802.050..2347.819 rows=10000000 loops=1)
+                            Sort Key: e.dep_id
+                            Sort Method: external merge  Disk: 215352kB
+                          1 ->  Seq Scan on empregados e  (cost=0.00..166934.81 rows=9999281 width=12) (actual time=0.030..510.826 rows=10000000 loops=1)
+          6 ->  Hash  (cost=166934.81..166934.81 rows=9999281 width=19) (actual time=1662.017..1662.018 rows=10000000 loops=1)
+                Buckets: 131072  Batches: 128  Memory Usage: 5100kB
+              5 ->  Seq Scan on empregados em  (cost=0.00..166934.81 rows=9999281 width=19) (actual time=91.528..621.292 rows=10000000 loops=1)
+    Planning Time: 0.289 ms
+    JIT:
+    Functions: 18
+    Options: Inlining true, Optimization true, Expressions true, Deforming true
+    Timing: Generation 2.312 ms, Inlining 5.459 ms, Optimization 49.853 ms, Emission 36.148 ms, Total 93.773 ms
+    Execution Time: 10056.673 ms
+    (22 rows)
+
+
+
+--->Explicação do Explain Analyze :::
+
+    1. Seq Scan on empregados e
+    2. Sort
+        Sort Key: e.dep_id
+        Sort Method: external merge  Disk: 215352kB
+    3. WindowAgg
+    4. Subquery Scan on s
+    5. Seq Scan on empregados em
+    6. Hash
+        Buckets: 131072  Batches: 128  Memory Usage: 5100kB
+    7. Hash Join
+        Hash Cond: (s.emp_id = em.emp_id)
+        Join Filter: (em.salario >= s.avg)
+        Rows Removed by Join Filter: 4941633
+    8. Sort
+        Sort Key: em.dep_id
+        Sort Method: external merge  Disk: 154584kB
+
+####
+
+    1. Sequencial Scan na tabela Empregados (e)
+    2. Ordenação usando:
+            Sort Key: e.dep_id
+            Sort Method: external merge  Disk: 215352kB
+    3. WindowAgg : causado pelo statement OVER()
+    4. Subquery Scan : lê o resultado de uma subquery
+    5. Sequencial Scan na tabela Empregados (em)
+    6. Hash: hasheia as linhas de uma query para serem usadas por sua operação pai (7). geralmente utilizada para performar um join
+    7. Hash Join: uma implementação do join onde uma das coleções de linhas a serem JUNTADAS é hasheada nas chaves do join usando um nó HASH separado.
+            Hash Cond: (s.emp_id = em.emp_id)
+            Join Filter: (em.salario >= s.avg)
+            Rows Removed by Join Filter: 4941633
+    8. Ordenação usando:
+            Sort Key: em.dep_id
+            Sort Method: external merge  Disk: 154584kB
+
+
+
+
+--->Usando Explain Analyze :::
+                                                                        QUERY PLAN
+    ---------------------------------------------------------------------------------------------------------------------------------------------------------
+    Sort  (cost=3231304.92..3239637.66 rows=3333094 width=19) (actual time=9634.732..9938.970 rows=5058367 loops=1)
+    Sort Key: em.dep_id
+    Sort Method: external merge  Disk: 154584kB
+    ->  Hash Join  (cost=2021811.68..2733480.34 rows=3333094 width=19) (actual time=3516.119..8803.262 rows=5058367 loops=1)
+            Hash Cond: (s.emp_id = em.emp_id)
+            Join Filter: (em.salario >= s.avg)
+            Rows Removed by Join Filter: 4941633
+            ->  Subquery Scan on s  (cost=1671295.86..1971274.29 rows=9999281 width=8) (actual time=1852.840..4884.198 rows=10000000 loops=1)
+                ->  WindowAgg  (cost=1671295.86..1871281.48 rows=9999281 width=12) (actual time=1852.838..4502.893 rows=10000000 loops=1)
+                        ->  Sort  (cost=1671295.86..1696294.06 rows=9999281 width=12) (actual time=1802.050..2347.819 rows=10000000 loops=1)
+                            Sort Key: e.dep_id
+                            Sort Method: external merge  Disk: 215352kB
+                            ->  Seq Scan on empregados e  (cost=0.00..166934.81 rows=9999281 width=12) (actual time=0.030..510.826 rows=10000000 loops=1)
+            ->  Hash  (cost=166934.81..166934.81 rows=9999281 width=19) (actual time=1662.017..1662.018 rows=10000000 loops=1)
+                Buckets: 131072  Batches: 128  Memory Usage: 5100kB
+                ->  Seq Scan on empregados em  (cost=0.00..166934.81 rows=9999281 width=19) (actual time=91.528..621.292 rows=10000000 loops=1)
+    Planning Time: 0.289 ms
+    JIT:
+    Functions: 18
+    Options: Inlining true, Optimization true, Expressions true, Deforming true
+    Timing: Generation 2.312 ms, Inlining 5.459 ms, Optimization 49.853 ms, Emission 36.148 ms, Total 93.773 ms
+    Execution Time: 10056.673 ms
+    (22 rows)
+
+--->Usando Explain :::
+                                                QUERY PLAN
+    ------------------------------------------------------------------------------------------------------
+    Sort  (cost=3231304.92..3239637.66 rows=3333094 width=19)
+    Sort Key: em.dep_id
+    ->  Hash Join  (cost=2021811.68..2733480.34 rows=3333094 width=19)
+            Hash Cond: (s.emp_id = em.emp_id)
+            Join Filter: (em.salario >= s.avg)
+            ->  Subquery Scan on s  (cost=1671295.86..1971274.29 rows=9999281 width=8)
+                ->  WindowAgg  (cost=1671295.86..1871281.48 rows=9999281 width=12)
+                        ->  Sort  (cost=1671295.86..1696294.06 rows=9999281 width=12)
+                            Sort Key: e.dep_id
+                            ->  Seq Scan on empregados e  (cost=0.00..166934.81 rows=9999281 width=12)
+            ->  Hash  (cost=166934.81..166934.81 rows=9999281 width=19)
+                ->  Seq Scan on empregados em  (cost=0.00..166934.81 rows=9999281 width=19)
+    JIT:
+    Functions: 18
+    Options: Inlining true, Optimization true, Expressions true, Deforming true
+    (15 rows)
