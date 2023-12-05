@@ -130,3 +130,138 @@ I - Consulta Mais Cara : 9436.666 ms (00:09.437) | 9292.362 ms (00:09.292) |  94
     Functions: 18
     Options: Inlining true, Optimization true, Expressions true, Deforming true
     (15 rows)
+
+-> com work_mem em 1GB: 8954.784 ms
+
+                                                                    QUERY PLAN
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2557519.92..2565852.66 rows=3333094 width=19) (actual time=9640.506..9766.711 rows=5058367 loops=1)
+   Sort Key: em.dep_id
+   Sort Method: quicksort  Memory: 512442kB
+   ->  Hash Join  (cost=1621446.68..2196405.34 rows=3333094 width=19) (actual time=3608.713..9154.453 rows=5058367 loops=1)
+         Hash Cond: (e.emp_id = em.emp_id)
+         Join Filter: (em.salario >= ((avg(e.salario) OVER (?))::integer))
+         Rows Removed by Join Filter: 4941633
+         ->  WindowAgg  (cost=1329520.86..1529506.48 rows=9999281 width=12) (actual time=1372.031..4224.815 rows=10000000 loops=1)
+               ->  Sort  (cost=1329520.86..1354519.06 rows=9999281 width=12) (actual time=1313.425..2234.383 rows=10000000 loops=1)
+                     Sort Key: e.dep_id
+                     Sort Method: quicksort  Memory: 861448kB
+                     ->  Seq Scan on empregados e  (cost=0.00..166934.81 rows=9999281 width=12) (actual time=0.051..509.031 rows=10000000 loops=1)
+         ->  Hash  (cost=166934.81..166934.81 rows=9999281 width=19) (actual time=2224.128..2224.129 rows=10000000 loops=1)
+               Buckets: 16777216  Batches: 1  Memory Usage: 650827kB
+               ->  Seq Scan on empregados em  (cost=0.00..166934.81 rows=9999281 width=19) (actual time=85.963..613.034 rows=10000000 loops=1)
+ Planning Time: 0.257 ms
+ JIT:
+   Functions: 17
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 2.054 ms, Inlining 3.608 ms, Optimization 47.933 ms, Emission 34.365 ms, Total 87.960 ms
+ Execution Time: 9877.191 ms
+(21 rows)
+
+Time: 9878.373 ms (00:09.878)
+
+
+II - Segunda mais Cara
+
+SELECT e.dep_id, e.nome, e.salario, cast(AVG(salario) over(partition by dep_id) AS integer) FROM empregados e;
+
+-> com work_mem 4MB:
+                                                               QUERY PLAN
+----------------------------------------------------------------------------------------------------------------------------------------
+ WindowAgg  (cost=1671295.86..1871281.48 rows=9999281 width=19) (actual time=2105.268..4773.904 rows=10000000 loops=1)
+   ->  Sort  (cost=1671295.86..1696294.06 rows=9999281 width=15) (actual time=2053.512..2625.879 rows=10000000 loops=1)
+         Sort Key: dep_id
+         Sort Method: external merge  Disk: 266432kB
+         ->  Seq Scan on empregados e  (cost=0.00..166934.81 rows=9999281 width=15) (actual time=73.722..578.003 rows=10000000 loops=1)
+ Planning Time: 0.513 ms
+ JIT:
+   Functions: 7
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 0.227 ms, Inlining 28.390 ms, Optimization 26.038 ms, Emission 19.271 ms, Total 73.926 ms
+ Execution Time: 5018.671 ms
+(11 rows)
+
+
+-> com work_mem 1GB ainda assim não mudou o resultado inicial
+                                                               QUERY PLAN
+----------------------------------------------------------------------------------------------------------------------------------------
+ WindowAgg  (cost=1329520.86..1529506.48 rows=9999281 width=19) (actual time=1686.760..4659.294 rows=10000000 loops=1)
+   ->  Sort  (cost=1329520.86..1354519.06 rows=9999281 width=15) (actual time=1626.307..2550.704 rows=10000000 loops=1)
+         Sort Key: dep_id
+         Sort Method: quicksort  Memory: 876387kB
+         ->  Seq Scan on empregados e  (cost=0.00..166934.81 rows=9999281 width=15) (actual time=85.223..631.107 rows=10000000 loops=1)
+ Planning Time: 0.099 ms
+ JIT:
+   Functions: 7
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 1.071 ms, Inlining 20.853 ms, Optimization 45.601 ms, Emission 18.709 ms, Total 86.235 ms
+ Execution Time: 4862.513 ms
+(11 rows)
+
+Time: 4863.090 ms (00:04.863)
+
+
+
+III - 
+SELECT distinct sum(e.salario) over(partition by d.dep_id), d.nome FROM empregados e JOIN departamentos d ON e.dep_id = d.dep_id order by sum;
+
+-> work_mem normal (4MB):
+                                                                          QUERY PLAN
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=1981843.18..1981874.33 rows=12460 width=528) (actual time=6639.955..6639.957 rows=32 loops=1)
+   Sort Key: (sum(e.salario) OVER (?))
+   Sort Method: quicksort  Memory: 27kB
+   ->  HashAggregate  (cost=1977930.99..1978055.59 rows=12460 width=528) (actual time=6639.925..6639.944 rows=32 loops=1)
+         Group Key: sum(e.salario) OVER (?), d.nome
+         Batches: 1  Memory Usage: 217kB
+         ->  WindowAgg  (cost=1602957.25..1927934.58 rows=9999281 width=528) (actual time=2012.070..5875.914 rows=9696700 loops=1)
+               ->  Merge Join  (cost=1602957.25..1777945.37 rows=9999281 width=524) (actual time=1910.491..3753.720 rows=9696700 loops=1)
+                     Merge Cond: (d.dep_id = e.dep_id)
+                     ->  Sort  (cost=16.39..16.74 rows=140 width=520) (actual time=99.130..99.143 rows=33 loops=1)
+                           Sort Key: d.dep_id
+                           Sort Method: quicksort  Memory: 26kB
+                           ->  Seq Scan on departamentos d  (cost=0.00..11.40 rows=140 width=520) (actual time=99.116..99.121 rows=33 loops=1)
+                     ->  Materialize  (cost=1602940.86..1652937.27 rows=9999281 width=8) (actual time=1811.338..3065.897 rows=9696701 loops=1)
+                           ->  Sort  (cost=1602940.86..1627939.06 rows=9999281 width=8) (actual time=1811.335..2368.915 rows=9696701 loops=1)
+                                 Sort Key: e.dep_id
+                                 Sort Method: external merge  Disk: 176200kB
+                                 ->  Seq Scan on empregados e  (cost=0.00..166934.81 rows=9999281 width=8) (actual time=0.025..503.886 rows=10000000 loops=1)
+ Planning Time: 0.229 ms
+ JIT:
+   Functions: 21
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 2.452 ms, Inlining 5.577 ms, Optimization 53.709 ms, Emission 39.850 ms, Total 101.589 ms
+ Execution Time: 6672.069 ms
+(24 rows)
+
+
+
+-> com work_mem em 1GB : 4170.296 ms
+                                                                       QUERY PLAN
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=1680484.98..1680516.13 rows=12460 width=528) (actual time=5450.509..5450.512 rows=32 loops=1)
+   Sort Key: (sum(e.salario) OVER (?))
+   Sort Method: quicksort  Memory: 27kB
+   ->  HashAggregate  (cost=1679512.79..1679637.39 rows=12460 width=528) (actual time=5450.460..5450.497 rows=32 loops=1)
+         Group Key: sum(e.salario) OVER (?), d.nome
+         Batches: 1  Memory Usage: 409kB
+         ->  WindowAgg  (cost=1329537.25..1629516.38 rows=9999281 width=528) (actual time=1512.860..4686.377 rows=9696700 loops=1)
+               ->  Merge Join  (cost=1329537.25..1479527.17 rows=9999281 width=524) (actual time=1428.767..2944.124 rows=9696700 loops=1)
+                     Merge Cond: (d.dep_id = e.dep_id)
+                     ->  Sort  (cost=16.39..16.74 rows=140 width=520) (actual time=98.764..98.774 rows=33 loops=1)
+                           Sort Key: d.dep_id
+                           Sort Method: quicksort  Memory: 26kB
+                           ->  Seq Scan on departamentos d  (cost=0.00..11.40 rows=140 width=520) (actual time=98.751..98.756 rows=33 loops=1)
+                     ->  Sort  (cost=1329520.86..1354519.06 rows=9999281 width=8) (actual time=1329.978..2236.886 rows=9696701 loops=1)
+                           Sort Key: e.dep_id
+                           Sort Method: quicksort  Memory: 818276kB
+                           ->  Seq Scan on empregados e  (cost=0.00..166934.81 rows=9999281 width=8) (actual time=0.042..515.274 rows=10000000 loops=1)
+ Planning Time: 0.259 ms
+ JIT:
+   Functions: 21
+   Options: Inlining true, Optimization true, Expressions true, Deforming true
+   Timing: Generation 2.334 ms, Inlining 5.720 ms, Optimization 53.349 ms, Emission 39.718 ms, Total 101.121 ms
+ Execution Time: 5461.679 ms
+(23 rows)
+
+Time: 5462.473 ms (00:05.462)
