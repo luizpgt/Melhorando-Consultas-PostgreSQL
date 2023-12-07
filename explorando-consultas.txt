@@ -4,6 +4,18 @@ sources :
     https://www.pgmustard.com/blog/work-mem
     https://www.pgmustard.com/docs/explain/hash-buckets
 
+Passos:
+    1. tentar melhorar a consulta
+    2. tentar criar índices que melhorem os tempos de execução
+    3.
+
+sudo vim /var/lib/postgres/data/postgresql.conf
+valores que podem ser alterados na `postgresql.conf`
+    work_mem
+    shared_buffers
+valores que já alterei no `postgres.conf`
+    shared_buffers = 1GB;
+
 I - Consulta Mais Cara : 9436.666 ms (00:09.437) | 9292.362 ms (00:09.292) |  9489.088 ms (00:09.489)
 
     Query :::
@@ -110,6 +122,7 @@ I - Consulta Mais Cara : 9436.666 ms (00:09.437) | 9292.362 ms (00:09.292) |  94
     Timing: Generation 2.312 ms, Inlining 5.459 ms, Optimization 49.853 ms, Emission 36.148 ms, Total 93.773 ms
     Execution Time: 10056.673 ms
     (22 rows)
+
 
 --->Usando Explain :::
                                                 QUERY PLAN
